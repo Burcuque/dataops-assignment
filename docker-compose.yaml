@@ -1,6 +1,5 @@
 version: '3.8'
 services:
-  # --- Veritabanı ve Depolama ---
   postgres:
     image: postgres:13
     environment:
@@ -20,43 +19,58 @@ services:
       - MINIO_ROOT_PASSWORD=minioadmin
     command: server /data --console-address ":9001"
 
-  # --- Spark Client (İşin yapılacağı yer) ---
   spark_client:
     build:
       context: .
       dockerfile: Dockerfile.spark_client
     container_name: spark_client
     volumes:
-      - shared_scripts:/scripts  # Git-sync buraya dosyaları basacak
+      - ./scripts:/scripts  
+    # - shared_scripts:/scripts
     ports:
       - "2222:22"
 
-  # --- Airflow ---
   airflow-webserver:
     image: apache/airflow:2.7.1
     command: webserver
+    restart: always
+    depends_on:
+      - postgres
+    ports:
+      - "8080:8080"
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://admin:password@postgres/traindb
+      - AIRFLOW__WEBSERVER__SECRET_KEY=bunumecburenekledim_123
+    volumes:
+      - shared_dags:/opt/airflow/dags
+
+  airflow-scheduler:
+    image: apache/airflow:2.7.1
+    command: scheduler
+    restart: always
     depends_on:
       - postgres
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://admin:password@postgres/traindb
+      - AIRFLOW__CORE__DAGS_FOLDER=/opt/airflow/dags/current/dags
+      - AIRFLOW__WEBSERVER__SECRET_KEY=bunumecburenekledim_123
     volumes:
-      - shared_dags:/opt/airflow/dags # Git-sync buraya DAG'ları basacak
-    ports:
-      - "8080:8080"
+      - shared_dags:/opt/airflow/dags
 
-  # --- Git-Sync Sidecar (Sihirli kısım) ---
-  # Not: Gerçek senaryoda bu her servis için ayrı bir sidecar olur.
   git-sync:
     image: registry.k8s.io/git-sync/git-sync:v4.2.1
+    user: "50000:0" # Airflow kullanıcısı ile eşleştiriyoruz (İzin hatası almamak için)
     environment:
-      - GIT_SYNC_REPO=https://github.com/KULLANICI_ADIN/REPO_ADIN.git
-      - GIT_SYNC_BRANCH=main
-      - GIT_SYNC_WAIT=60
-      - GIT_SYNC_ROOT=/tmp/git
+      - GITSYNC_REPO=https://github.com/Burcuque/dataops-assignment.git
+      - GITSYNC_REF=main
+      - GITSYNC_PERIOD=30s
+      - GITSYNC_ROOT=/opt/airflow/dags # İndirme yeri Airflow ile aynı olmalı
+      - GITSYNC_DEST=repo
+      - GITSYNC_LINK=current
     volumes:
-      - shared_dags:/tmp/git/dags
-      - shared_scripts:/tmp/git/scripts
+      - shared_dags:/opt/airflow/dags
 
 volumes:
   shared_dags:
