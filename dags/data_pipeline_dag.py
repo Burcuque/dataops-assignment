@@ -16,8 +16,9 @@ with DAG(
 ) as dag:
 
     # SSHOperator ile spark_client konteynerine bağlanıp kodu çalıştır
-    run_cleaning_on_spark = SSHOperator(
+    run_cleaning = SSHOperator(
         task_id='run_cleaning_script',
-        ssh_conn_id='ssh_spark_client', # Bunu Airflow UI'dan tanımlamalısın
-        command='python3 /scripts/clean_data.py'
-    )
+        ssh_conn_id='spark_client_ssh',
+        command="python3 /scripts/current/scripts/clean_data.py", 
+        dag=dag,
+)

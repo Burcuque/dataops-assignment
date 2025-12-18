@@ -25,8 +25,10 @@ services:
       dockerfile: Dockerfile.spark_client
     container_name: spark_client
     volumes:
-      - ./scripts:/scripts  
+      - shared_dags:/scripts 
+    # - ./scripts:/scripts  
     # - shared_scripts:/scripts
+    
     ports:
       - "2222:22"
 
