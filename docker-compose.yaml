@@ -1,0 +1,63 @@
+version: '3.8'
+services:
+  # --- Veritabanı ve Depolama ---
+  postgres:
+    image: postgres:13
+    environment:
+      - POSTGRES_DB=traindb
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=password
+    ports:
+      - "5432:5432"
+
+  minio:
+    image: minio/minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    command: server /data --console-address ":9001"
+
+  # --- Spark Client (İşin yapılacağı yer) ---
+  spark_client:
+    build:
+      context: .
+      dockerfile: Dockerfile.spark_client
+    container_name: spark_client
+    volumes:
+      - shared_scripts:/scripts  # Git-sync buraya dosyaları basacak
+    ports:
+      - "2222:22"
+
+  # --- Airflow ---
+  airflow-webserver:
+    image: apache/airflow:2.7.1
+    command: webserver
+    depends_on:
+      - postgres
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://admin:password@postgres/traindb
+    volumes:
+      - shared_dags:/opt/airflow/dags # Git-sync buraya DAG'ları basacak
+    ports:
+      - "8080:8080"
+
+  # --- Git-Sync Sidecar (Sihirli kısım) ---
+  # Not: Gerçek senaryoda bu her servis için ayrı bir sidecar olur.
+  git-sync:
+    image: registry.k8s.io/git-sync/git-sync:v4.2.1
+    environment:
+      - GIT_SYNC_REPO=https://github.com/KULLANICI_ADIN/REPO_ADIN.git
+      - GIT_SYNC_BRANCH=main
+      - GIT_SYNC_WAIT=60
+      - GIT_SYNC_ROOT=/tmp/git
+    volumes:
+      - shared_dags:/tmp/git/dags
+      - shared_scripts:/tmp/git/scripts
+
+volumes:
+  shared_dags:
+  shared_scripts:
